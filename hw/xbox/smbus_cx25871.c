@@ -26,6 +26,7 @@
 #include "hw/hw.h"
 #include "hw/i2c/i2c.h"
 #include "hw/i2c/smbus_slave.h"
+#include "hw/qdev-properties.h"
 #include "smbus.h"
 
 #define TYPE_SMBUS_CX25871 "smbus-cx25871"

@@ -21,6 +21,7 @@
 #define HW_ACPI_XBOX_H
 
 #include "hw/acpi/acpi.h"
+#include "hw/irq.h"
 
 typedef struct XBOX_PMRegs {
     ACPIREGS acpi_regs;
