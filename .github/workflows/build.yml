@@ -44,7 +44,7 @@ jobs:
     - name: Install Dependencies
       run: |
         echo "Downloading MSYS2 environment..."
-        Invoke-WebRequest -Uri "https://github.com/aqua-rgb/xboxemu-msys2/releases/latest/download/msys64.7z" -OutFile "msys64.7z"
+        Invoke-WebRequest -Uri "https://github.com/aqua-rgb/xboxemu-msys2/releases/download/build-202504080659/msys64.7z" -OutFile "msys64.7z"
         echo "Extracting MSYS2 environment..."
         7z x -y msys64.7z "-oC:\tools\"
         echo "Updating MSYS2 environment..."
