@@ -9,7 +9,7 @@ jobs:
     - name: Create Build Tag
       run: |
         export BUILD_TAG=build-$(date -u +'%Y%m%d%H%M')
-        echo "::set-env name=BUILD_TAG::$BUILD_TAG"
+        echo "BUILD_TAG=$BUILD_TAG" >> $GITHUB_ENV
         mkdir -p dist
         echo -n $BUILD_TAG > dist/tag
     - name: Upload Artifacts
@@ -30,12 +30,14 @@ jobs:
       run: |
         if "${{ matrix.configuration }}" == "Debug":
           print('Configuring for Debug')
-          echo "::set-env name=BUILD_PARAM::--debug"
-          echo "::set-env name=ARTIFACT_NAME::xboxemu-win-debug.zip"
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("BUILD_PARAM=--debug\n")
+            f.write("ARTIFACT_NAME=xboxemu-win-debug.zip\n")
         else:
           print('Configuring for Release')
-          echo "::set-env name=BUILD_PARAM::"
-          echo "::set-env name=ARTIFACT_NAME::xboxemu-win-release.zip"
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("BUILD_PARAM=\n")
+            f.write("ARTIFACT_NAME=xboxemu-win-release.zip\n")
     - name: Clone Tree
       uses: actions/checkout@v4
     - name: Install Dependencies
@@ -84,12 +86,14 @@ jobs:
       run: |
         if "${{ matrix.configuration }}" == "Debug":
           print('Configuring for Debug')
-          echo "::set-env name=BUILD_PARAM::--debug"
-          echo "::set-env name=ARTIFACT_NAME::xboxemu-ubuntu-debug"
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("BUILD_PARAM=--debug\n")
+            f.write("ARTIFACT_NAME=xboxemu-ubuntu-debug\n")
         else:
           print('Configuring for Release')
-          echo "::set-env name=BUILD_PARAM::"
-          echo "::set-env name=ARTIFACT_NAME::xboxemu-ubuntu-release"
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("BUILD_PARAM=\n")
+            f.write("ARTIFACT_NAME=xboxemu-ubuntu-release\n")
     - name: Clone Tree
       uses: actions/checkout@v4
     - name: Install Dependencies
@@ -126,14 +130,17 @@ jobs:
     - name: Define Build Options
       shell: python
       run: |
+        import os
         if "${{ matrix.configuration }}" == "Debug":
           print('Configuring for Debug')
-          echo "::set-env name=BUILD_PARAM::--debug"
-          echo "::set-env name=ARTIFACT_NAME::xboxemu-macos-debug"
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("BUILD_PARAM=--debug\n")
+            f.write("ARTIFACT_NAME=xboxemu-macos-debug\n")
         else:
           print('Configuring for Release')
-          echo "::set-env name=BUILD_PARAM::"
-          echo "::set-env name=ARTIFACT_NAME::xboxemu-macos-release"
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write("BUILD_PARAM=\n")
+            f.write("ARTIFACT_NAME=xboxemu-macos-release\n")
     - name: Clone Tree
       uses: actions/checkout@v4
     - name: Install Dependencies
@@ -166,8 +173,6 @@ jobs:
   Release:
     runs-on: ubuntu-latest
     needs: [Ubuntu, Windows, macOS]
-    env:
-      BUILD_TAG:
     steps:
     - name: Download Artifacts
       uses: actions/download-artifact@v3
@@ -175,7 +180,7 @@ jobs:
         name: dist
     - name: Get Package Info
       run: |
-        echo "::set-env name=BUILD_TAG::$(cat dist/tag)"
+        echo "BUILD_TAG=$(cat dist/tag)" >> $GITHUB_ENV
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       id: create_release
