@@ -1,0 +1,212 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  Init:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create Build Tag
+      run: |
+        export BUILD_TAG=build-$(date -u +'%Y%m%d%H%M')
+        echo "::set-env name=BUILD_TAG::$BUILD_TAG"
+        mkdir -p dist
+        echo -n $BUILD_TAG > dist/tag
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist
+
+  Windows:
+    runs-on: windows-latest
+    needs: Init
+    strategy:
+      matrix:
+        configuration: ["Debug", "Release"]
+    steps:
+    - name: Define Build Options
+      shell: python
+      run: |
+        if "${{ matrix.configuration }}" == "Debug":
+          print('Configuring for Debug')
+          echo "::set-env name=BUILD_PARAM::--debug"
+          echo "::set-env name=ARTIFACT_NAME::xboxemu-win-debug.zip"
+        else:
+          print('Configuring for Release')
+          echo "::set-env name=BUILD_PARAM::"
+          echo "::set-env name=ARTIFACT_NAME::xboxemu-win-release.zip"
+    - name: Clone Tree
+      uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: |
+        echo "Downloading MSYS2 environment..."
+        Invoke-WebRequest -Uri "https://github.com/mborgerson/xboxemu-msys2/releases/latest/download/msys64.7z" -OutFile "msys64.7z"
+        echo "Extracting MSYS2 environment..."
+        7z x -y msys64.7z "-oC:\tools\"
+        echo "Updating MSYS2 environment..."
+        C:\tools\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"
+    - name: Initialize Compiler Cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: C:\tools\msys64\tmp\xboxemu-ccache
+        key: cache-${{ runner.os }}-${{ matrix.configuration }}-${{ github.sha }}
+        restore-keys: cache-${{ runner.os }}-${{ matrix.configuration }}-
+    - name: Compile
+      run: |
+        C:\tools\msys64\usr\bin\bash.exe -lc @"
+        set -e
+        cd `$GITHUB_WORKSPACE
+        export CCACHE_DIR=/tmp/xboxemu-ccache
+        export CCACHE_MAXSIZE=250M
+        export PATH="/usr/lib/ccache/bin:/mingw64/bin:`$PATH"
+        ./build.sh ${{ env.BUILD_PARAM }}
+        echo -e '\nCompiler Cache Stats:'
+        ccache -s -c
+        "@
+        7z a ${{env.ARTIFACT_NAME}} .\dist\*
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: dist
+        path: ${{env.ARTIFACT_NAME}}
+
+  Ubuntu:
+    runs-on: ubuntu-latest
+    needs: Init
+    strategy:
+      matrix:
+        configuration: ["Debug", "Release"]
+    steps:
+    - name: Define Build Options
+      shell: python
+      run: |
+        if "${{ matrix.configuration }}" == "Debug":
+          print('Configuring for Debug')
+          echo "::set-env name=BUILD_PARAM::--debug"
+          echo "::set-env name=ARTIFACT_NAME::xboxemu-ubuntu-debug"
+        else:
+          print('Configuring for Release')
+          echo "::set-env name=BUILD_PARAM::"
+          echo "::set-env name=ARTIFACT_NAME::xboxemu-ubuntu-release"
+    - name: Clone Tree
+      uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libsdl2-dev \
+          libepoxy-dev \
+          libpixman-1-dev \
+          ccache
+    - name: Initialize Compiler Cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/xboxemu-ccache
+        key: cache-${{ runner.os }}-${{ matrix.configuration }}-${{ github.sha }}
+        restore-keys: cache-${{ runner.os }}-${{ matrix.configuration }}-
+    - name: Compile
+      run: |
+        export CCACHE_DIR=/tmp/xboxemu-ccache
+        export CCACHE_MAXSIZE=250M
+        export PATH="/usr/lib/ccache:$PATH"
+        ./build.sh ${{ env.BUILD_PARAM }}
+        echo -e "\nCompiler Cache Stats:"
+        ccache -s -c
+
+  macOS:
+    runs-on: macOS-latest
+    needs: Init
+    strategy:
+      matrix:
+        configuration: ["Debug", "Release"]
+    steps:
+    - name: Define Build Options
+      shell: python
+      run: |
+        if "${{ matrix.configuration }}" == "Debug":
+          print('Configuring for Debug')
+          echo "::set-env name=BUILD_PARAM::--debug"
+          echo "::set-env name=ARTIFACT_NAME::xboxemu-macos-debug"
+        else:
+          print('Configuring for Release')
+          echo "::set-env name=BUILD_PARAM::"
+          echo "::set-env name=ARTIFACT_NAME::xboxemu-macos-release"
+    - name: Clone Tree
+      uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: |
+        brew update
+        brew unlink python@2
+        brew install \
+          pixman \
+          sdl2 \
+          libepoxy \
+          coreutils \
+          pkg-config \
+          ccache
+    - name: Initialize Compiler Cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/xboxemu-ccache
+        key: cache-${{ runner.os }}-${{ matrix.configuration }}-${{ github.sha }}
+        restore-keys: cache-${{ runner.os }}-${{ matrix.configuration }}-
+    - name: Compile
+      run: |
+        export CCACHE_DIR=/tmp/xboxemu-ccache
+        export CCACHE_MAXSIZE=250M
+        export PATH="/usr/local/opt/ccache/libexec:$PATH"
+        ./build.sh ${{ env.BUILD_PARAM }}
+        echo -e "\nCompiler Cache Stats:"
+        ccache -s -c
+
+  Release:
+    runs-on: ubuntu-latest
+    needs: [Ubuntu, Windows, macOS]
+    env:
+      BUILD_TAG:
+    steps:
+    - name: Download Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: dist
+    - name: Get Package Info
+      run: |
+        echo "::set-env name=BUILD_TAG::$(cat dist/tag)"
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      id: create_release
+      uses: comnoco/create-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.BUILD_TAG }}
+        release_name: ${{ env.BUILD_TAG }}
+        draft: false
+        prerelease: false
+    - name: Upload Release Assets (Windows Debug Build)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      id: upload-release-asset-win-debug
+      uses: jhnstn/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_name: xboxemu-win-debug.zip
+        asset_path: dist/xboxemu-win-debug.zip
+        asset_content_type: application/zip
+
+    - name: Upload Release Assets (Windows Release Build)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      id: upload-release-asset-win-release
+      uses: jhnstn/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_name: xboxemu-win-release.zip
+        asset_path: dist/xboxemu-win-release.zip
+        asset_content_type: application/zip
